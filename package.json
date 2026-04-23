@@ -1,0 +1,32 @@
+{
+  "name": "link-converter",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build:css": "tailwindcss -i ./src/input.css -o ./styles.css --minify",
+    "dev": "node server.js",
+    "start": "node server.js",
+    "watch:css": "tailwindcss -i ./src/input.css -o ./styles.css --watch",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/103492-MaxPaardekam/link-converter.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/103492-MaxPaardekam/link-converter/issues"
+  },
+  "homepage": "https://github.com/103492-MaxPaardekam/link-converter#readme",
+  "devDependencies": {
+    "tailwindcss": "^3.4.13"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1"
+  }
+}

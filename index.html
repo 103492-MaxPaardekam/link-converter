@@ -3,7 +3,628 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Document</title>
+    <title>1688/Taobao to CNFans + ACBuy Converter</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@500;700;800&display=swap"
+      rel="stylesheet"
+    />
   </head>
-  <body></body>
+  <body class="min-h-screen bg-cream text-ink antialiased">
+    <div class="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+      <div
+        class="absolute -top-24 -left-24 h-72 w-72 rounded-full bg-sand/70 blur-3xl"
+      ></div>
+      <div
+        class="absolute top-1/3 -right-16 h-64 w-64 rounded-full bg-teal/20 blur-3xl animate-float"
+      ></div>
+      <div
+        class="absolute bottom-0 left-1/4 h-56 w-56 rounded-full bg-rust/20 blur-3xl"
+      ></div>
+      <div
+        class="absolute inset-0 opacity-20"
+        style="
+          background-image:
+            linear-gradient(#12121210 1px, transparent 1px),
+            linear-gradient(90deg, #12121210 1px, transparent 1px);
+          background-size: 40px 40px;
+        "
+      ></div>
+    </div>
+
+    <main
+      class="mx-auto flex w-full max-w-4xl flex-col px-4 py-10 sm:px-6 lg:py-14"
+    >
+      <header class="mb-8 animate-appear">
+        <div class="mb-3 flex flex-wrap items-center gap-2">
+          <p
+            class="inline-flex rounded-full border border-ink/15 bg-white/70 px-3 py-1 text-xs font-mono tracking-wide"
+          >
+            Link Converter
+          </p>
+          <a
+            href="qc.html"
+            class="inline-flex rounded-full border border-teal/30 bg-teal/10 px-3 py-1 text-xs font-semibold text-teal transition hover:bg-teal hover:text-white"
+          >
+            Open QC Viewer
+          </a>
+        </div>
+        <h1 class="text-3xl font-extrabold leading-tight sm:text-4xl">
+          1688 + Taobao to
+          <span class="text-rust">CNFans</span>
+          and
+          <span class="text-teal">ACBuy</span>
+        </h1>
+        <p class="mt-3 max-w-2xl text-sm text-ink/75 sm:text-base">
+          Paste any supported 1688 or Taobao URL and generate both converter
+          links instantly.
+        </p>
+      </header>
+
+      <section
+        class="rounded-3xl border border-ink/10 bg-white/75 p-5 shadow-card backdrop-blur sm:p-7 animate-appear"
+      >
+        <label for="sourceUrl" class="mb-2 block text-sm font-semibold"
+          >Source link</label
+        >
+        <div class="flex flex-col gap-3 sm:flex-row">
+          <input
+            id="sourceUrl"
+            type="text"
+            autocomplete="off"
+            placeholder="https://item.taobao.com/... or https://detail.1688.com/..."
+            class="w-full rounded-2xl border border-ink/20 bg-white px-4 py-3 font-mono text-sm outline-none ring-teal/50 transition focus:ring"
+          />
+          <button
+            id="convertButton"
+            class="rounded-2xl bg-ink px-6 py-3 text-sm font-semibold text-cream transition hover:translate-y-[-1px] hover:bg-black disabled:cursor-not-allowed disabled:opacity-40"
+            disabled
+          >
+            Convert
+          </button>
+        </div>
+        <p id="inputHint" class="mt-2 text-xs text-ink/65">
+          Supported domains: taobao.com, m.taobao.com, item.taobao.com, tb.cn,
+          1688.com, m.1688.com, detail.1688.com
+        </p>
+        <p
+          id="resolveInfo"
+          class="mt-2 hidden text-xs font-medium text-teal"
+        ></p>
+        <p id="errorText" class="mt-2 hidden text-sm font-medium text-rust"></p>
+      </section>
+
+      <section
+        id="resultsPanel"
+        class="mt-6 hidden rounded-3xl border border-ink/10 bg-white/80 p-5 shadow-card backdrop-blur sm:p-7 animate-appear"
+      >
+        <div class="mb-4 flex flex-wrap items-center gap-2">
+          <span class="mr-2 text-sm font-semibold">View:</span>
+          <button
+            data-filter="all"
+            class="filter-btn rounded-full border border-ink/20 px-3 py-1.5 text-xs font-semibold text-ink"
+          >
+            All
+          </button>
+          <button
+            data-filter="cnfans"
+            class="filter-btn rounded-full border border-ink/20 px-3 py-1.5 text-xs font-semibold text-ink"
+          >
+            CNFans
+          </button>
+          <button
+            data-filter="acbuy"
+            class="filter-btn rounded-full border border-ink/20 px-3 py-1.5 text-xs font-semibold text-ink"
+          >
+            ACBuy
+          </button>
+        </div>
+
+        <div id="resultGrid" class="grid grid-cols-1 gap-3">
+          <article
+            data-platform="cnfans"
+            class="result-card rounded-2xl border border-rust/20 bg-rust/5 p-4"
+          >
+            <div class="mb-2 flex items-center justify-between gap-2">
+              <h2 class="text-sm font-bold text-rust">CNFans</h2>
+              <button
+                data-copy="cnfans"
+                class="rounded-lg border border-rust/30 bg-white px-2.5 py-1 text-xs font-semibold text-rust transition hover:bg-rust/10"
+              >
+                Copy
+              </button>
+            </div>
+            <a
+              id="cnfansLink"
+              class="block break-all font-mono text-xs text-ink underline decoration-ink/30 decoration-1 underline-offset-2"
+              target="_blank"
+              rel="noopener noreferrer"
+            ></a>
+          </article>
+
+          <article
+            data-platform="acbuy"
+            class="result-card rounded-2xl border border-teal/20 bg-teal/5 p-4"
+          >
+            <div class="mb-2 flex items-center justify-between gap-2">
+              <h2 class="text-sm font-bold text-teal">ACBuy</h2>
+              <button
+                data-copy="acbuy"
+                class="rounded-lg border border-teal/30 bg-white px-2.5 py-1 text-xs font-semibold text-teal transition hover:bg-teal/10"
+              >
+                Copy
+              </button>
+            </div>
+            <a
+              id="acbuyLink"
+              class="block break-all font-mono text-xs text-ink underline decoration-ink/30 decoration-1 underline-offset-2"
+              target="_blank"
+              rel="noopener noreferrer"
+            ></a>
+          </article>
+        </div>
+      </section>
+
+      <section
+        id="historyPanel"
+        class="mt-6 rounded-3xl border border-ink/10 bg-white/80 p-5 shadow-card backdrop-blur sm:p-7 animate-appear"
+      >
+        <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <h2 class="text-base font-extrabold">Recent conversions</h2>
+          <button
+            id="clearHistoryButton"
+            class="rounded-lg border border-ink/20 bg-white px-3 py-1.5 text-xs font-semibold text-ink transition hover:bg-ink hover:text-cream"
+          >
+            Clear history
+          </button>
+        </div>
+        <p id="historyEmpty" class="text-sm text-ink/65">
+          No conversions yet. Your recent links will appear here.
+        </p>
+        <div id="historyList" class="mt-3 grid grid-cols-1 gap-3"></div>
+      </section>
+    </main>
+
+    <script>
+      // These templates are easy to update once you confirm official target formats.
+      const PLATFORM_TEMPLATES = {
+        cnfans: "https://www.cnfans.com/product/?url=",
+        acbuy: "https://www.acbuy.com/product?url=",
+      };
+      const HISTORY_KEY = "link-converter-history-v1";
+      const HISTORY_LIMIT = 10;
+
+      const sourceUrlInput = document.getElementById("sourceUrl");
+      const convertButton = document.getElementById("convertButton");
+      const resultsPanel = document.getElementById("resultsPanel");
+      const resolveInfo = document.getElementById("resolveInfo");
+      const errorText = document.getElementById("errorText");
+      const cnfansLink = document.getElementById("cnfansLink");
+      const acbuyLink = document.getElementById("acbuyLink");
+      const filterButtons = document.querySelectorAll(".filter-btn");
+      const resultCards = document.querySelectorAll(".result-card");
+      const copyButtons = document.querySelectorAll("[data-copy]");
+      const clearHistoryButton = document.getElementById("clearHistoryButton");
+      const historyEmpty = document.getElementById("historyEmpty");
+      const historyList = document.getElementById("historyList");
+
+      let historyItems = loadHistory();
+
+      function extractFirstUrl(text) {
+        const matches = text.match(/https?:\/\/[^\s]+/i);
+        return matches ? matches[0].trim() : "";
+      }
+
+      function isSupportedSource(rawValue) {
+        try {
+          const url = new URL(rawValue);
+          const host = url.hostname.toLowerCase();
+
+          const taobaoHosts = ["taobao.com", "m.taobao.com", "item.taobao.com"];
+          const isTaobao =
+            taobaoHosts.includes(host) ||
+            host.endsWith(".taobao.com") ||
+            host === "tb.cn" ||
+            host.endsWith(".tb.cn");
+          const is1688 = host === "1688.com" || host.endsWith(".1688.com");
+
+          return isTaobao || is1688;
+        } catch (_error) {
+          return false;
+        }
+      }
+
+      function getCleanInputValue() {
+        const raw = sourceUrlInput.value.trim();
+        if (!raw) return "";
+        return extractFirstUrl(raw) || raw;
+      }
+
+      function extractProductId(sourceUrl) {
+        try {
+          const url = new URL(sourceUrl);
+          const fromQuery = url.searchParams.get("id");
+          if (fromQuery && /^\d+$/.test(fromQuery)) {
+            return fromQuery;
+          }
+
+          const offerMatch = url.pathname.match(/\/offer\/(\d+)\.html/i);
+          if (offerMatch) {
+            return offerMatch[1];
+          }
+
+          const taobaoPathMatch = url.pathname.match(/\/(\d+)\.html?/i);
+          if (taobaoPathMatch) {
+            return taobaoPathMatch[1];
+          }
+        } catch (_error) {
+          return "";
+        }
+
+        return "";
+      }
+
+      function buildConvertedLinks(sourceUrl) {
+        const cnfansEncoded = encodeURIComponent(sourceUrl);
+        const acbuyDoubleEncoded = encodeURIComponent(
+          encodeURIComponent(sourceUrl),
+        );
+        const productId = extractProductId(sourceUrl);
+        const idSegment = productId ? `&id=${productId}` : "";
+        return {
+          cnfans: `${PLATFORM_TEMPLATES.cnfans}${cnfansEncoded}`,
+          acbuy: `${PLATFORM_TEMPLATES.acbuy}${acbuyDoubleEncoded}${idSegment}&source=AL`,
+        };
+      }
+
+      function isShortTaobaoHost(urlString) {
+        try {
+          const host = new URL(urlString).hostname.toLowerCase();
+          return host === "tb.cn" || host.endsWith(".tb.cn");
+        } catch (_error) {
+          return false;
+        }
+      }
+
+      async function resolveShortLinkIfNeeded(sourceUrl) {
+        if (!isShortTaobaoHost(sourceUrl)) {
+          return {
+            finalUrl: sourceUrl,
+            wasResolved: false,
+          };
+        }
+
+        try {
+          const endpoint = `https://unshorten.me/s/${encodeURIComponent(sourceUrl)}`;
+          const response = await fetch(endpoint);
+
+          if (!response.ok) {
+            throw new Error("Resolver request failed");
+          }
+
+          const resolvedText = (await response.text()).trim();
+
+          if (
+            resolvedText.startsWith("http://") ||
+            resolvedText.startsWith("https://")
+          ) {
+            return {
+              finalUrl: resolvedText,
+              wasResolved: true,
+            };
+          }
+        } catch (_error) {
+          return {
+            finalUrl: sourceUrl,
+            wasResolved: false,
+            resolverFailed: true,
+          };
+        }
+
+        return {
+          finalUrl: sourceUrl,
+          wasResolved: false,
+          resolverFailed: true,
+        };
+      }
+
+      function setResolveInfo(message) {
+        if (!message) {
+          resolveInfo.classList.add("hidden");
+          resolveInfo.textContent = "";
+          return;
+        }
+
+        resolveInfo.textContent = message;
+        resolveInfo.classList.remove("hidden");
+      }
+
+      function setError(message) {
+        if (!message) {
+          errorText.classList.add("hidden");
+          errorText.textContent = "";
+          return;
+        }
+
+        errorText.textContent = message;
+        errorText.classList.remove("hidden");
+      }
+
+      function refreshButtonState() {
+        const value = getCleanInputValue();
+        const valid = isSupportedSource(value);
+
+        convertButton.disabled = !valid;
+
+        if (!value) {
+          setError("");
+          return;
+        }
+
+        setError(valid ? "" : "Please enter a valid 1688 or Taobao URL.");
+      }
+
+      function setActiveFilter(filter) {
+        filterButtons.forEach((button) => {
+          const isActive = button.dataset.filter === filter;
+
+          button.classList.remove(
+            "bg-ink",
+            "text-cream",
+            "border-ink",
+            "bg-rust",
+            "border-rust",
+            "bg-teal",
+            "border-teal",
+            "text-white",
+            "bg-white",
+            "text-ink",
+            "border-ink/20",
+          );
+
+          if (!isActive) {
+            button.classList.add("bg-white", "text-ink", "border-ink/20");
+            return;
+          }
+
+          if (filter === "cnfans") {
+            button.classList.add("bg-rust", "border-rust", "text-white");
+            return;
+          }
+
+          if (filter === "acbuy") {
+            button.classList.add("bg-teal", "border-teal", "text-white");
+            return;
+          }
+
+          button.classList.add("bg-ink", "border-ink", "text-white");
+        });
+
+        resultCards.forEach((card) => {
+          const platform = card.dataset.platform;
+          const show = filter === "all" || filter === platform;
+          card.classList.toggle("hidden", !show);
+        });
+      }
+
+      function saveHistory(items) {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(items));
+      }
+
+      function loadHistory() {
+        try {
+          const raw = localStorage.getItem(HISTORY_KEY);
+          if (!raw) return [];
+          const parsed = JSON.parse(raw);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch (_error) {
+          return [];
+        }
+      }
+
+      function formatTime(iso) {
+        try {
+          return new Date(iso).toLocaleString();
+        } catch (_error) {
+          return "Unknown time";
+        }
+      }
+
+      async function copyText(text, button) {
+        if (!text) return;
+
+        try {
+          await navigator.clipboard.writeText(text);
+          const previous = button.textContent;
+          button.textContent = "Copied";
+          setTimeout(() => {
+            button.textContent = previous;
+          }, 1000);
+        } catch (_error) {
+          setError("Clipboard access failed. You can still copy manually.");
+        }
+      }
+
+      function addHistory(entry) {
+        const latest = historyItems[0];
+        if (
+          latest &&
+          latest.originalInput === entry.originalInput &&
+          latest.conversionSource === entry.conversionSource &&
+          latest.cnfans === entry.cnfans &&
+          latest.acbuy === entry.acbuy
+        ) {
+          return;
+        }
+
+        historyItems = [entry, ...historyItems].slice(0, HISTORY_LIMIT);
+        saveHistory(historyItems);
+        renderHistory();
+      }
+
+      function renderHistory() {
+        historyList.innerHTML = "";
+        historyEmpty.classList.toggle("hidden", historyItems.length > 0);
+
+        historyItems.forEach((item, index) => {
+          const card = document.createElement("article");
+          card.className = "rounded-2xl border border-ink/15 bg-white p-4";
+
+          const meta = document.createElement("p");
+          meta.className = "mb-2 text-xs font-mono text-ink/60";
+          meta.textContent = formatTime(item.createdAt);
+
+          const source = document.createElement("p");
+          source.className = "mb-3 break-all font-mono text-xs text-ink/80";
+          source.textContent = item.originalInput;
+
+          const actions = document.createElement("div");
+          actions.className = "flex flex-wrap gap-2";
+
+          const useButton = document.createElement("button");
+          useButton.className =
+            "rounded-lg border border-ink/20 bg-white px-2.5 py-1 text-xs font-semibold text-ink transition hover:bg-ink hover:text-cream";
+          useButton.textContent = "Use";
+          useButton.addEventListener("click", () => {
+            sourceUrlInput.value = item.originalInput;
+            refreshButtonState();
+            sourceUrlInput.focus();
+          });
+
+          const copyCnfansButton = document.createElement("button");
+          copyCnfansButton.className =
+            "rounded-lg border border-rust/25 bg-white px-2.5 py-1 text-xs font-semibold text-rust transition hover:bg-rust/10";
+          copyCnfansButton.textContent = "Copy CNFans";
+          copyCnfansButton.addEventListener("click", () =>
+            copyText(item.cnfans, copyCnfansButton),
+          );
+
+          const copyAcbuyButton = document.createElement("button");
+          copyAcbuyButton.className =
+            "rounded-lg border border-teal/25 bg-white px-2.5 py-1 text-xs font-semibold text-teal transition hover:bg-teal/10";
+          copyAcbuyButton.textContent = "Copy ACBuy";
+          copyAcbuyButton.addEventListener("click", () =>
+            copyText(item.acbuy, copyAcbuyButton),
+          );
+
+          const removeButton = document.createElement("button");
+          removeButton.className =
+            "rounded-lg border border-ink/20 bg-white px-2.5 py-1 text-xs font-semibold text-ink/80 transition hover:bg-ink hover:text-cream";
+          removeButton.textContent = "Remove";
+          removeButton.addEventListener("click", () => {
+            historyItems = historyItems.filter(
+              (_entry, itemIndex) => itemIndex !== index,
+            );
+            saveHistory(historyItems);
+            renderHistory();
+          });
+
+          actions.appendChild(useButton);
+          actions.appendChild(copyCnfansButton);
+          actions.appendChild(copyAcbuyButton);
+          actions.appendChild(removeButton);
+
+          card.appendChild(meta);
+          card.appendChild(source);
+          card.appendChild(actions);
+
+          historyList.appendChild(card);
+        });
+      }
+
+      sourceUrlInput.addEventListener("input", refreshButtonState);
+
+      sourceUrlInput.addEventListener("paste", () => {
+        requestAnimationFrame(refreshButtonState);
+      });
+
+      convertButton.addEventListener("click", async () => {
+        const value = getCleanInputValue();
+
+        if (!isSupportedSource(value)) {
+          convertButton.disabled = true;
+          setError("Please enter a valid 1688 or Taobao URL.");
+          setResolveInfo("");
+          resultsPanel.classList.add("hidden");
+          return;
+        }
+
+        convertButton.disabled = true;
+        setResolveInfo(
+          isShortTaobaoHost(value) ? "Resolving short link..." : "",
+        );
+
+        const resolved = await resolveShortLinkIfNeeded(value);
+        const conversionSource = resolved.finalUrl;
+
+        if (!isSupportedSource(conversionSource)) {
+          setError("Resolved URL is not a supported 1688 or Taobao link.");
+          setResolveInfo("");
+          resultsPanel.classList.add("hidden");
+          refreshButtonState();
+          return;
+        }
+
+        if (resolved.wasResolved) {
+          setResolveInfo("Short link expanded successfully before conversion.");
+        } else if (isShortTaobaoHost(value) && resolved.resolverFailed) {
+          setResolveInfo(
+            "Could not auto-expand this short link, converted with original URL instead.",
+          );
+        } else {
+          setResolveInfo("");
+        }
+
+        const links = buildConvertedLinks(conversionSource);
+
+        cnfansLink.href = links.cnfans;
+        cnfansLink.textContent = links.cnfans;
+        acbuyLink.href = links.acbuy;
+        acbuyLink.textContent = links.acbuy;
+
+        setError("");
+        resultsPanel.classList.remove("hidden");
+        setActiveFilter("all");
+
+        addHistory({
+          createdAt: new Date().toISOString(),
+          originalInput: value,
+          conversionSource,
+          cnfans: links.cnfans,
+          acbuy: links.acbuy,
+        });
+
+        refreshButtonState();
+      });
+
+      filterButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+          setActiveFilter(button.dataset.filter);
+        });
+      });
+
+      copyButtons.forEach((button) => {
+        button.addEventListener("click", async () => {
+          const target =
+            button.dataset.copy === "cnfans"
+              ? cnfansLink.textContent
+              : acbuyLink.textContent;
+          copyText(target, button);
+        });
+      });
+
+      clearHistoryButton.addEventListener("click", () => {
+        historyItems = [];
+        saveHistory(historyItems);
+        renderHistory();
+      });
+
+      refreshButtonState();
+      setActiveFilter("all");
+      renderHistory();
+    </script>
+  </body>
 </html>
