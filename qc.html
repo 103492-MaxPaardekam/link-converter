@@ -12,6 +12,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@500;700;800&display=swap"
       rel="stylesheet"
     />
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   </head>
   <body class="min-h-screen bg-cream text-ink antialiased">
     <div class="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
@@ -80,6 +81,10 @@
         <p class="mt-2 text-xs text-ink/65">
           Supported input: acbuy.com and cnfans.com product pages.
         </p>
+        <p
+          id="proxyBadge"
+          class="mt-2 inline-flex hidden rounded-full border px-2 py-1 text-[10px] font-semibold"
+        ></p>
         <p id="statusText" class="mt-2 hidden text-sm font-medium"></p>
       </section>
 
@@ -87,8 +92,30 @@
         class="mt-6 rounded-3xl border border-ink/10 bg-white/80 p-5 shadow-card backdrop-blur sm:p-7"
       >
         <div class="mb-4 flex items-center justify-between gap-2">
-          <h2 class="text-base font-extrabold">QC Gallery</h2>
-          <p id="countText" class="text-xs font-mono text-ink/65">0 images</p>
+          <div class="flex items-center gap-2">
+            <h2 class="text-base font-extrabold">QC Gallery</h2>
+            <button
+              id="downloadAllButton"
+              class="rounded-lg border border-rust/25 bg-rust/10 px-2.5 py-1 text-[10px] font-semibold text-rust transition hover:bg-rust hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+              disabled
+            >
+              Download all ZIP
+            </button>
+            <button
+              id="failedReportButton"
+              class="rounded-lg border border-ink/25 bg-ink/5 px-2.5 py-1 text-[10px] font-semibold text-ink transition hover:bg-ink hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+              disabled
+            >
+              Failed URLs report
+            </button>
+          </div>
+          <div class="flex items-center gap-2">
+            <p
+              id="sourceBadge"
+              class="hidden rounded-full border px-2 py-1 text-[10px] font-semibold"
+            ></p>
+            <p id="countText" class="text-xs font-mono text-ink/65">0 images</p>
+          </div>
         </div>
         <p id="emptyText" class="text-sm text-ink/65">
           No images yet. Paste a supported link to load QC images.
@@ -100,16 +127,181 @@
       </section>
     </main>
 
+    <div
+      id="lightbox"
+      class="fixed inset-0 z-50 hidden items-center justify-center bg-black/90 p-4"
+    >
+      <button
+        id="lightboxClose"
+        class="absolute right-4 top-4 rounded-full border border-white/30 bg-white/10 px-3 py-1 text-sm font-semibold text-white transition hover:bg-white/20"
+      >
+        Close
+      </button>
+      <button
+        id="lightboxPrev"
+        class="absolute left-3 top-1/2 -translate-y-1/2 rounded-full border border-white/30 bg-white/10 px-3 py-2 text-xl font-bold text-white transition hover:bg-white/20"
+      >
+        ‹
+      </button>
+      <img
+        id="lightboxImage"
+        alt="QC preview"
+        class="max-h-[90vh] max-w-[92vw] rounded-xl border border-white/20 object-contain"
+      />
+      <button
+        id="lightboxNext"
+        class="absolute right-3 top-1/2 -translate-y-1/2 rounded-full border border-white/30 bg-white/10 px-3 py-2 text-xl font-bold text-white transition hover:bg-white/20"
+      >
+        ›
+      </button>
+      <p
+        id="lightboxCounter"
+        class="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full border border-white/30 bg-white/10 px-3 py-1 text-xs font-mono text-white"
+      ></p>
+    </div>
+
     <script>
       const qcUrlInput = document.getElementById("qcUrl");
       const reloadButton = document.getElementById("reloadButton");
       const statusText = document.getElementById("statusText");
+      const proxyBadge = document.getElementById("proxyBadge");
       const countText = document.getElementById("countText");
+      const sourceBadge = document.getElementById("sourceBadge");
       const emptyText = document.getElementById("emptyText");
       const gallery = document.getElementById("gallery");
+      const downloadAllButton = document.getElementById("downloadAllButton");
+      const failedReportButton = document.getElementById("failedReportButton");
+      const lightbox = document.getElementById("lightbox");
+      const lightboxImage = document.getElementById("lightboxImage");
+      const lightboxClose = document.getElementById("lightboxClose");
+      const lightboxPrev = document.getElementById("lightboxPrev");
+      const lightboxNext = document.getElementById("lightboxNext");
+      const lightboxCounter = document.getElementById("lightboxCounter");
 
       let debounceTimer = null;
       let lastLoadedUrl = "";
+      let currentGalleryUrls = [];
+      let lightboxIndex = 0;
+      let lastZipFailedUrls = [];
+
+      function setProxyBadge(state) {
+        proxyBadge.classList.remove(
+          "hidden",
+          "border-teal/30",
+          "bg-teal/10",
+          "text-teal",
+          "border-rust/30",
+          "bg-rust/10",
+          "text-rust",
+          "border-ink/30",
+          "bg-ink/5",
+          "text-ink",
+        );
+
+        if (!state) {
+          proxyBadge.classList.add("hidden");
+          proxyBadge.textContent = "";
+          return;
+        }
+
+        if (state === "online") {
+          proxyBadge.classList.add("border-teal/30", "bg-teal/10", "text-teal");
+          proxyBadge.textContent = "Proxy: Online";
+          return;
+        }
+
+        if (state === "offline") {
+          proxyBadge.classList.add("border-rust/30", "bg-rust/10", "text-rust");
+          proxyBadge.textContent = "Proxy: Offline";
+          return;
+        }
+
+        proxyBadge.classList.add("border-ink/30", "bg-ink/5", "text-ink");
+        proxyBadge.textContent = "Proxy: Checking";
+      }
+
+      async function copyText(text, button, fallbackLabel) {
+        if (!text) return;
+
+        try {
+          await navigator.clipboard.writeText(text);
+          const previous = button.textContent;
+          button.textContent = "Copied";
+          setTimeout(() => {
+            button.textContent = previous || fallbackLabel;
+          }, 1000);
+        } catch (_error) {
+          setStatus(
+            "Clipboard access failed. Copy manually from the opened tab.",
+            "error",
+          );
+        }
+      }
+
+      async function checkProxyHealth() {
+        setProxyBadge("checking");
+
+        const endpoints = [
+          "http://127.0.0.1:8787/api/health",
+          "http://localhost:8787/api/health",
+        ];
+
+        for (const endpoint of endpoints) {
+          try {
+            const response = await fetch(endpoint);
+            if (!response.ok) continue;
+            const data = await response.json();
+            if (data?.ok) {
+              setProxyBadge("online");
+              return;
+            }
+          } catch (_error) {
+            // Try next endpoint.
+          }
+        }
+
+        setProxyBadge("offline");
+      }
+
+      function setSourceBadge(mode) {
+        sourceBadge.classList.remove(
+          "hidden",
+          "border-teal/30",
+          "bg-teal/10",
+          "text-teal",
+          "border-ink/30",
+          "bg-ink/5",
+          "text-ink",
+          "border-rust/30",
+          "bg-rust/10",
+          "text-rust",
+        );
+
+        if (!mode) {
+          sourceBadge.classList.add("hidden");
+          sourceBadge.textContent = "";
+          return;
+        }
+
+        if (mode === "api-fallback") {
+          sourceBadge.classList.add(
+            "border-rust/30",
+            "bg-rust/10",
+            "text-rust",
+          );
+          sourceBadge.textContent = "Source: ACBuy API fallback";
+          return;
+        }
+
+        if (mode === "html-external") {
+          sourceBadge.classList.add("border-ink/30", "bg-ink/5", "text-ink");
+          sourceBadge.textContent = "Source: HTML via external proxy";
+          return;
+        }
+
+        sourceBadge.classList.add("border-teal/30", "bg-teal/10", "text-teal");
+        sourceBadge.textContent = "Source: HTML via local proxy";
+      }
 
       function setStatus(message, tone) {
         if (!message) {
@@ -255,6 +447,183 @@
         return trimmed;
       }
 
+      function canonicalizeImageUrl(rawUrl) {
+        try {
+          const url = new URL(rawUrl);
+          const removable = [
+            "x-oss-process",
+            "x5secdata",
+            "spm",
+            "scm",
+            "traceid",
+            "from",
+            "fromkv",
+            "token",
+          ];
+          removable.forEach((key) => url.searchParams.delete(key));
+          url.hash = "";
+          return url.toString();
+        } catch (_error) {
+          return rawUrl;
+        }
+      }
+
+      function dedupeImageUrls(urls) {
+        const seen = new Set();
+        const output = [];
+
+        urls.forEach((url) => {
+          const canonical = canonicalizeImageUrl(url);
+          if (seen.has(canonical)) return;
+          seen.add(canonical);
+          output.push(url);
+        });
+
+        return output;
+      }
+
+      function showLightbox(index) {
+        if (!currentGalleryUrls.length) return;
+        lightboxIndex = Math.max(
+          0,
+          Math.min(index, currentGalleryUrls.length - 1),
+        );
+        lightboxImage.src = currentGalleryUrls[lightboxIndex];
+        lightboxCounter.textContent = `${lightboxIndex + 1} / ${currentGalleryUrls.length}`;
+        lightbox.classList.remove("hidden");
+        lightbox.classList.add("flex");
+      }
+
+      function hideLightbox() {
+        lightbox.classList.add("hidden");
+        lightbox.classList.remove("flex");
+      }
+
+      function stepLightbox(delta) {
+        if (!currentGalleryUrls.length) return;
+        let nextIndex = lightboxIndex + delta;
+        if (nextIndex < 0) nextIndex = currentGalleryUrls.length - 1;
+        if (nextIndex >= currentGalleryUrls.length) nextIndex = 0;
+        showLightbox(nextIndex);
+      }
+
+      function triggerDownload(url, filename) {
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        link.rel = "noopener noreferrer";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
+
+      function inferImageExtension(url) {
+        try {
+          const path = new URL(url).pathname;
+          const match = path.match(/\.([a-zA-Z0-9]+)$/);
+          if (match) return match[1].toLowerCase();
+        } catch (_error) {
+          return "jpg";
+        }
+
+        return "jpg";
+      }
+
+      async function downloadAllAsZip() {
+        if (!currentGalleryUrls.length) return;
+
+        if (!window.JSZip) {
+          setStatus(
+            "ZIP library not available. Refresh and try again.",
+            "error",
+          );
+          return;
+        }
+
+        downloadAllButton.disabled = true;
+        const originalLabel = downloadAllButton.textContent;
+
+        try {
+          const zip = new JSZip();
+          let successCount = 0;
+          const failedUrls = [];
+
+          for (let index = 0; index < currentGalleryUrls.length; index += 1) {
+            const url = currentGalleryUrls[index];
+            downloadAllButton.textContent = `Zipping ${index + 1}/${currentGalleryUrls.length}`;
+
+            try {
+              const response = await fetch(url);
+              if (!response.ok) {
+                failedUrls.push(`${url} -> HTTP ${response.status}`);
+                continue;
+              }
+
+              const blob = await response.blob();
+              const extension = inferImageExtension(url);
+              zip.file(
+                `qc-${String(index + 1).padStart(3, "0")}.${extension}`,
+                blob,
+              );
+              successCount += 1;
+            } catch (error) {
+              // Skip individual failures and continue with remaining images.
+              failedUrls.push(`${url} -> ${String(error)}`);
+            }
+          }
+
+          lastZipFailedUrls = failedUrls;
+          failedReportButton.disabled = lastZipFailedUrls.length === 0;
+
+          if (successCount === 0) {
+            setStatus(
+              "Could not fetch images for ZIP. Try per-image download.",
+              "error",
+            );
+            return;
+          }
+
+          downloadAllButton.textContent = "Generating ZIP...";
+          const zipBlob = await zip.generateAsync({ type: "blob" });
+          const zipUrl = URL.createObjectURL(zipBlob);
+          triggerDownload(zipUrl, "qc-images.zip");
+          setTimeout(() => URL.revokeObjectURL(zipUrl), 3000);
+
+          if (successCount < currentGalleryUrls.length) {
+            setStatus(
+              `Downloaded ZIP with ${successCount}/${currentGalleryUrls.length} images (some skipped).`,
+              "ok",
+            );
+          } else {
+            setStatus(`Downloaded ZIP with ${successCount} images.`, "ok");
+          }
+        } catch (_error) {
+          setStatus("Failed to build ZIP archive.", "error");
+        } finally {
+          downloadAllButton.textContent = originalLabel;
+          downloadAllButton.disabled = currentGalleryUrls.length === 0;
+        }
+      }
+
+      function downloadFailedUrlsReport() {
+        if (!lastZipFailedUrls.length) return;
+
+        const lines = [
+          `QC ZIP Failure Report`,
+          `Generated: ${new Date().toISOString()}`,
+          `Failed count: ${lastZipFailedUrls.length}`,
+          "",
+          ...lastZipFailedUrls,
+        ];
+
+        const blob = new Blob([lines.join("\n")], {
+          type: "text/plain;charset=utf-8",
+        });
+        const reportUrl = URL.createObjectURL(blob);
+        triggerDownload(reportUrl, "qc-failed-urls-report.txt");
+        setTimeout(() => URL.revokeObjectURL(reportUrl), 3000);
+      }
+
       function parseAcbuyContext(acbuyUrlString) {
         try {
           const parsed = new URL(acbuyUrlString);
@@ -288,33 +657,44 @@
         const stripped = targetUrl.replace(/^https?:\/\//i, "");
         const encodedTarget = encodeURIComponent(targetUrl);
 
-        const localEndpoints = [
-          `http://127.0.0.1:8787/api/fetch?url=${encodedTarget}`,
-          `http://localhost:8787/api/fetch?url=${encodedTarget}`,
-        ].filter(Boolean);
-
         const endpoints = [
-          ...localEndpoints,
-          `https://api.codetabs.com/v1/proxy/?quest=${encodedTarget}`,
-          `https://r.jina.ai/http://${stripped}`,
-          `https://r.jina.ai/http://www.${stripped}`,
+          {
+            url: `http://127.0.0.1:8787/api/fetch?url=${encodedTarget}`,
+            mode: "html-local",
+          },
+          {
+            url: `http://localhost:8787/api/fetch?url=${encodedTarget}`,
+            mode: "html-local",
+          },
+          {
+            url: `https://api.codetabs.com/v1/proxy/?quest=${encodedTarget}`,
+            mode: "html-external",
+          },
+          {
+            url: `https://r.jina.ai/http://${stripped}`,
+            mode: "html-external",
+          },
+          {
+            url: `https://r.jina.ai/http://www.${stripped}`,
+            mode: "html-external",
+          },
         ];
 
         const errors = [];
         for (const endpoint of endpoints) {
           try {
-            const response = await fetch(endpoint);
+            const response = await fetch(endpoint.url);
             if (!response.ok) {
-              errors.push(`${endpoint} -> ${response.status}`);
+              errors.push(`${endpoint.url} -> ${response.status}`);
               continue;
             }
 
             const text = await response.text();
             if (text && text.trim().length > 0) {
-              return text;
+              return { text, mode: endpoint.mode };
             }
           } catch (error) {
-            errors.push(`${endpoint} -> ${String(error)}`);
+            errors.push(`${endpoint.url} -> ${String(error)}`);
           }
         }
 
@@ -398,6 +778,10 @@
 
       function renderGallery(imageUrls) {
         gallery.innerHTML = "";
+        currentGalleryUrls = [...imageUrls];
+        lastZipFailedUrls = [];
+        failedReportButton.disabled = true;
+        downloadAllButton.disabled = currentGalleryUrls.length === 0;
         countText.textContent = `${imageUrls.length} image${imageUrls.length === 1 ? "" : "s"}`;
         emptyText.classList.toggle("hidden", imageUrls.length > 0);
 
@@ -410,6 +794,10 @@
           link.href = url;
           link.target = "_blank";
           link.rel = "noopener noreferrer";
+          link.addEventListener("click", (event) => {
+            event.preventDefault();
+            showLightbox(index);
+          });
 
           const img = document.createElement("img");
           img.src = url;
@@ -422,9 +810,32 @@
             "truncate border-t border-ink/10 px-2 py-1 font-mono text-[10px] text-ink/65";
           label.textContent = `#${index + 1}`;
 
+          const actions = document.createElement("div");
+          actions.className =
+            "flex items-center gap-1 border-t border-ink/10 p-1";
+
+          const copyUrlButton = document.createElement("button");
+          copyUrlButton.className =
+            "rounded-md border border-teal/25 bg-white px-2 py-1 text-[10px] font-semibold text-teal transition hover:bg-teal/10";
+          copyUrlButton.textContent = "Copy URL";
+          copyUrlButton.addEventListener("click", () =>
+            copyText(url, copyUrlButton, "Copy URL"),
+          );
+
+          const downloadButton = document.createElement("button");
+          downloadButton.className =
+            "rounded-md border border-rust/25 bg-white px-2 py-1 text-[10px] font-semibold text-rust transition hover:bg-rust/10";
+          downloadButton.textContent = "Download";
+          downloadButton.addEventListener("click", () =>
+            triggerDownload(url, `qc-${index + 1}.jpg`),
+          );
+
           link.appendChild(img);
           card.appendChild(link);
           card.appendChild(label);
+          actions.appendChild(copyUrlButton);
+          actions.appendChild(downloadButton);
+          card.appendChild(actions);
           gallery.appendChild(card);
         });
       }
@@ -435,6 +846,7 @@
             "Please input a valid acbuy.com or cnfans.com link.",
             "error",
           );
+          setSourceBadge("");
           renderGallery([]);
           return;
         }
@@ -446,10 +858,12 @@
         lastLoadedUrl = urlString;
         reloadButton.disabled = true;
         setStatus("Loading page and extracting images...", "info");
+        setSourceBadge("");
 
         try {
-          const pageText = await fetchPageText(urlString);
-          let extracted = extractImageUrlsFromText(pageText, urlString);
+          const fetchResult = await fetchPageText(urlString);
+          let extracted = extractImageUrlsFromText(fetchResult.text, urlString);
+          let sourceMode = extracted.length > 0 ? fetchResult.mode : "";
 
           if (extracted.length === 0) {
             const host = new URL(urlString).hostname.toLowerCase();
@@ -458,16 +872,14 @@
               const apiFallbackImages = await getAcbuyFallbackImages(urlString);
               if (apiFallbackImages.length > 0) {
                 extracted = apiFallbackImages;
-                setStatus(
-                  "Loaded images using ACBuy API fallback.",
-                  "ok",
-                );
+                sourceMode = "api-fallback";
               }
             }
           }
 
           if (extracted.length === 0) {
             renderGallery([]);
+            setSourceBadge("");
             setStatus("No images found from this page response.", "error");
             return;
           }
@@ -480,12 +892,16 @@
             .filter((item) => item.score >= 5)
             .map((item) => item.url);
           const fallback = scored.map((item) => item.url);
-          const output = prioritized.length > 0 ? prioritized : fallback;
+          const output = dedupeImageUrls(
+            prioritized.length > 0 ? prioritized : fallback,
+          );
 
           renderGallery(output.slice(0, 120));
+          setSourceBadge(sourceMode || "html-local");
           setStatus(`Loaded ${output.length} possible QC image(s).`, "ok");
         } catch (error) {
           renderGallery([]);
+          setSourceBadge("");
           setStatus(
             "Could not fetch page content automatically. Start local proxy with 'npm run dev' (port 8787), then try Reload.",
             "error",
@@ -512,6 +928,7 @@
             value ? "Waiting for a valid acbuy.com or cnfans.com link." : "",
             value ? "error" : "info",
           );
+          setSourceBadge("");
           renderGallery([]);
           return;
         }
@@ -537,6 +954,37 @@
         loadQcImages(value, true);
       });
 
+      downloadAllButton.addEventListener("click", downloadAllAsZip);
+      failedReportButton.addEventListener("click", downloadFailedUrlsReport);
+
+      lightboxClose.addEventListener("click", hideLightbox);
+      lightboxPrev.addEventListener("click", () => stepLightbox(-1));
+      lightboxNext.addEventListener("click", () => stepLightbox(1));
+      lightbox.addEventListener("click", (event) => {
+        if (event.target === lightbox) {
+          hideLightbox();
+        }
+      });
+      document.addEventListener("keydown", (event) => {
+        if (lightbox.classList.contains("hidden")) return;
+
+        if (event.key === "Escape") {
+          hideLightbox();
+          return;
+        }
+
+        if (event.key === "ArrowRight") {
+          stepLightbox(1);
+          return;
+        }
+
+        if (event.key === "ArrowLeft") {
+          stepLightbox(-1);
+        }
+      });
+
+      checkProxyHealth();
+      setInterval(checkProxyHealth, 20000);
       refreshReloadState();
     </script>
   </body>

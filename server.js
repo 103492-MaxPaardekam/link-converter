@@ -26,6 +26,10 @@ function isAllowedTarget(rawUrl) {
 app.use(cors());
 app.use(express.static(path.join(__dirname)));
 
+app.get("/api/health", (_req, res) => {
+  res.json({ ok: true, service: "qc-proxy" });
+});
+
 app.get("/api/fetch", async (req, res) => {
   const { url } = req.query;
 
