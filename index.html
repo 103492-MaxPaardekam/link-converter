@@ -102,6 +102,27 @@
         class="mt-6 hidden rounded-3xl border border-ink/10 bg-white/80 p-5 shadow-card backdrop-blur sm:p-7 animate-appear"
       >
         <div class="mb-4 flex flex-wrap items-center gap-2">
+          <button
+            id="copyBothButton"
+            class="rounded-lg border border-ink/20 bg-white px-3 py-1.5 text-xs font-semibold text-ink transition hover:bg-ink hover:text-cream"
+          >
+            Copy both links
+          </button>
+          <button
+            id="openQcAcbuyButton"
+            class="rounded-lg border border-teal/25 bg-teal/10 px-3 py-1.5 text-xs font-semibold text-teal transition hover:bg-teal hover:text-white"
+          >
+            Open ACBuy in QC
+          </button>
+          <button
+            id="openQcCnfansButton"
+            class="rounded-lg border border-rust/25 bg-rust/10 px-3 py-1.5 text-xs font-semibold text-rust transition hover:bg-rust hover:text-white"
+          >
+            Open CNFans in QC
+          </button>
+        </div>
+
+        <div class="mb-4 flex flex-wrap items-center gap-2">
           <span class="mr-2 text-sm font-semibold">View:</span>
           <button
             data-filter="all"
@@ -207,6 +228,9 @@
       const filterButtons = document.querySelectorAll(".filter-btn");
       const resultCards = document.querySelectorAll(".result-card");
       const copyButtons = document.querySelectorAll("[data-copy]");
+      const copyBothButton = document.getElementById("copyBothButton");
+      const openQcAcbuyButton = document.getElementById("openQcAcbuyButton");
+      const openQcCnfansButton = document.getElementById("openQcCnfansButton");
       const clearHistoryButton = document.getElementById("clearHistoryButton");
       const historyEmpty = document.getElementById("historyEmpty");
       const historyList = document.getElementById("historyList");
@@ -510,6 +534,41 @@
             copyText(item.acbuy, copyAcbuyButton),
           );
 
+          const copyBothButton = document.createElement("button");
+          copyBothButton.className =
+            "rounded-lg border border-ink/20 bg-white px-2.5 py-1 text-xs font-semibold text-ink transition hover:bg-ink hover:text-cream";
+          copyBothButton.textContent = "Copy both";
+          copyBothButton.addEventListener("click", async () => {
+            const payload = `CNFans\n${item.cnfans}\n\nACBuy\n${item.acbuy}`;
+
+            try {
+              await navigator.clipboard.writeText(payload);
+              const previous = copyBothButton.textContent;
+              copyBothButton.textContent = "Copied";
+              setTimeout(() => {
+                copyBothButton.textContent = previous;
+              }, 1000);
+            } catch (_error) {
+              setError("Clipboard access failed. You can still copy manually.");
+            }
+          });
+
+          const openQcCnfansButton = document.createElement("button");
+          openQcCnfansButton.className =
+            "rounded-lg border border-rust/25 bg-rust/10 px-2.5 py-1 text-xs font-semibold text-rust transition hover:bg-rust hover:text-white";
+          openQcCnfansButton.textContent = "QC CNFans";
+          openQcCnfansButton.addEventListener("click", () => {
+            openQcViewerWithLink(item.cnfans);
+          });
+
+          const openQcAcbuyButton = document.createElement("button");
+          openQcAcbuyButton.className =
+            "rounded-lg border border-teal/25 bg-teal/10 px-2.5 py-1 text-xs font-semibold text-teal transition hover:bg-teal hover:text-white";
+          openQcAcbuyButton.textContent = "QC ACBuy";
+          openQcAcbuyButton.addEventListener("click", () => {
+            openQcViewerWithLink(item.acbuy);
+          });
+
           const removeButton = document.createElement("button");
           removeButton.className =
             "rounded-lg border border-ink/20 bg-white px-2.5 py-1 text-xs font-semibold text-ink/80 transition hover:bg-ink hover:text-cream";
@@ -525,6 +584,9 @@
           actions.appendChild(useButton);
           actions.appendChild(copyCnfansButton);
           actions.appendChild(copyAcbuyButton);
+          actions.appendChild(copyBothButton);
+          actions.appendChild(openQcCnfansButton);
+          actions.appendChild(openQcAcbuyButton);
           actions.appendChild(removeButton);
 
           card.appendChild(meta);
@@ -535,13 +597,13 @@
         });
       }
 
-      sourceUrlInput.addEventListener("input", refreshButtonState);
+      function openQcViewerWithLink(link) {
+        if (!link) return;
+        const target = `qc.html?url=${encodeURIComponent(link)}`;
+        window.open(target, "_blank", "noopener,noreferrer");
+      }
 
-      sourceUrlInput.addEventListener("paste", () => {
-        requestAnimationFrame(refreshButtonState);
-      });
-
-      convertButton.addEventListener("click", async () => {
+      async function handleConvert() {
         const value = getCleanInputValue();
 
         if (!isSupportedSource(value)) {
@@ -598,6 +660,22 @@
         });
 
         refreshButtonState();
+      }
+
+      sourceUrlInput.addEventListener("input", refreshButtonState);
+
+      sourceUrlInput.addEventListener("paste", () => {
+        requestAnimationFrame(refreshButtonState);
+      });
+
+      convertButton.addEventListener("click", handleConvert);
+
+      sourceUrlInput.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+
+        event.preventDefault();
+        if (convertButton.disabled) return;
+        handleConvert();
       });
 
       filterButtons.forEach((button) => {
@@ -614,6 +692,33 @@
               : acbuyLink.textContent;
           copyText(target, button);
         });
+      });
+
+      copyBothButton.addEventListener("click", async () => {
+        const cnfans = cnfansLink.textContent;
+        const acbuy = acbuyLink.textContent;
+        if (!cnfans || !acbuy) return;
+
+        const payload = `CNFans\n${cnfans}\n\nACBuy\n${acbuy}`;
+
+        try {
+          await navigator.clipboard.writeText(payload);
+          const previous = copyBothButton.textContent;
+          copyBothButton.textContent = "Copied both";
+          setTimeout(() => {
+            copyBothButton.textContent = previous;
+          }, 1000);
+        } catch (_error) {
+          setError("Clipboard access failed. You can still copy manually.");
+        }
+      });
+
+      openQcAcbuyButton.addEventListener("click", () => {
+        openQcViewerWithLink(acbuyLink.textContent);
+      });
+
+      openQcCnfansButton.addEventListener("click", () => {
+        openQcViewerWithLink(cnfansLink.textContent);
       });
 
       clearHistoryButton.addEventListener("click", () => {
