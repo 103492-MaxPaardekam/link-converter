@@ -108,6 +108,20 @@
             >
               Failed URLs report
             </button>
+            <button
+              id="toggleFailuresButton"
+              class="rounded-lg border border-ink/25 bg-white px-2.5 py-1 text-[10px] font-semibold text-ink transition hover:bg-ink hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+              disabled
+            >
+              Show failures (0)
+            </button>
+            <button
+              id="retryFailuresButton"
+              class="rounded-lg border border-teal/25 bg-teal/10 px-2.5 py-1 text-[10px] font-semibold text-teal transition hover:bg-teal hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+              disabled
+            >
+              Retry failed
+            </button>
           </div>
           <div class="flex items-center gap-2">
             <p
@@ -120,6 +134,16 @@
         <p id="emptyText" class="text-sm text-ink/65">
           No images yet. Paste a supported link to load QC images.
         </p>
+        <section
+          id="failedPanel"
+          class="mt-3 hidden rounded-xl border border-rust/20 bg-rust/5 p-3"
+        >
+          <p class="mb-2 text-xs font-semibold text-rust">Last ZIP failures</p>
+          <pre
+            id="failedPanelText"
+            class="max-h-44 overflow-auto whitespace-pre-wrap break-all font-mono text-[11px] text-ink/80"
+          ></pre>
+        </section>
         <div
           id="gallery"
           class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"
@@ -171,6 +195,14 @@
       const gallery = document.getElementById("gallery");
       const downloadAllButton = document.getElementById("downloadAllButton");
       const failedReportButton = document.getElementById("failedReportButton");
+      const toggleFailuresButton = document.getElementById(
+        "toggleFailuresButton",
+      );
+      const retryFailuresButton = document.getElementById(
+        "retryFailuresButton",
+      );
+      const failedPanel = document.getElementById("failedPanel");
+      const failedPanelText = document.getElementById("failedPanelText");
       const lightbox = document.getElementById("lightbox");
       const lightboxImage = document.getElementById("lightboxImage");
       const lightboxClose = document.getElementById("lightboxClose");
@@ -182,7 +214,31 @@
       let lastLoadedUrl = "";
       let currentGalleryUrls = [];
       let lightboxIndex = 0;
-      let lastZipFailedUrls = [];
+      let lastZipFailedItems = [];
+      let failuresVisible = false;
+
+      function refreshFailuresPanel() {
+        const hasFailures = lastZipFailedItems.length > 0;
+        failedReportButton.disabled = !hasFailures;
+        toggleFailuresButton.disabled = !hasFailures;
+        retryFailuresButton.disabled = !hasFailures;
+
+        toggleFailuresButton.textContent = failuresVisible
+          ? `Hide failures (${lastZipFailedItems.length})`
+          : `Show failures (${lastZipFailedItems.length})`;
+
+        if (!hasFailures) {
+          failedPanel.classList.add("hidden");
+          failedPanelText.textContent = "";
+          failuresVisible = false;
+          return;
+        }
+
+        failedPanelText.textContent = lastZipFailedItems
+          .map((item) => `${item.url} -> ${item.reason}`)
+          .join("\n");
+        failedPanel.classList.toggle("hidden", !failuresVisible);
+      }
 
       function setProxyBadge(state) {
         proxyBadge.classList.remove(
@@ -546,7 +602,7 @@
         try {
           const zip = new JSZip();
           let successCount = 0;
-          const failedUrls = [];
+          const failedItems = [];
 
           for (let index = 0; index < currentGalleryUrls.length; index += 1) {
             const url = currentGalleryUrls[index];
@@ -555,7 +611,7 @@
             try {
               const response = await fetch(url);
               if (!response.ok) {
-                failedUrls.push(`${url} -> HTTP ${response.status}`);
+                failedItems.push({ url, reason: `HTTP ${response.status}` });
                 continue;
               }
 
@@ -568,12 +624,13 @@
               successCount += 1;
             } catch (error) {
               // Skip individual failures and continue with remaining images.
-              failedUrls.push(`${url} -> ${String(error)}`);
+              failedItems.push({ url, reason: String(error) });
             }
           }
 
-          lastZipFailedUrls = failedUrls;
-          failedReportButton.disabled = lastZipFailedUrls.length === 0;
+          lastZipFailedItems = failedItems;
+          failuresVisible = false;
+          refreshFailuresPanel();
 
           if (successCount === 0) {
             setStatus(
@@ -606,14 +663,14 @@
       }
 
       function downloadFailedUrlsReport() {
-        if (!lastZipFailedUrls.length) return;
+        if (!lastZipFailedItems.length) return;
 
         const lines = [
           `QC ZIP Failure Report`,
           `Generated: ${new Date().toISOString()}`,
-          `Failed count: ${lastZipFailedUrls.length}`,
+          `Failed count: ${lastZipFailedItems.length}`,
           "",
-          ...lastZipFailedUrls,
+          ...lastZipFailedItems.map((item) => `${item.url} -> ${item.reason}`),
         ];
 
         const blob = new Blob([lines.join("\n")], {
@@ -622,6 +679,75 @@
         const reportUrl = URL.createObjectURL(blob);
         triggerDownload(reportUrl, "qc-failed-urls-report.txt");
         setTimeout(() => URL.revokeObjectURL(reportUrl), 3000);
+      }
+
+      async function retryFailedUrls() {
+        if (!lastZipFailedItems.length || !window.JSZip) return;
+
+        retryFailuresButton.disabled = true;
+        const originalLabel = retryFailuresButton.textContent;
+
+        try {
+          const zip = new JSZip();
+          const stillFailed = [];
+          let recoveredCount = 0;
+
+          for (let index = 0; index < lastZipFailedItems.length; index += 1) {
+            const item = lastZipFailedItems[index];
+            retryFailuresButton.textContent = `Retry ${index + 1}/${lastZipFailedItems.length}`;
+
+            try {
+              const response = await fetch(item.url);
+              if (!response.ok) {
+                stillFailed.push({
+                  url: item.url,
+                  reason: `HTTP ${response.status}`,
+                });
+                continue;
+              }
+
+              const blob = await response.blob();
+              const extension = inferImageExtension(item.url);
+              zip.file(
+                `qc-recovered-${String(recoveredCount + 1).padStart(3, "0")}.${extension}`,
+                blob,
+              );
+              recoveredCount += 1;
+            } catch (error) {
+              stillFailed.push({ url: item.url, reason: String(error) });
+            }
+          }
+
+          lastZipFailedItems = stillFailed;
+          refreshFailuresPanel();
+
+          if (recoveredCount > 0) {
+            retryFailuresButton.textContent = "Generating recovered ZIP...";
+            const zipBlob = await zip.generateAsync({ type: "blob" });
+            const zipUrl = URL.createObjectURL(zipBlob);
+            triggerDownload(zipUrl, "qc-recovered-images.zip");
+            setTimeout(() => URL.revokeObjectURL(zipUrl), 3000);
+          }
+
+          if (stillFailed.length > 0) {
+            setStatus(
+              `Retry recovered ${recoveredCount}, still failed ${stillFailed.length}.`,
+              recoveredCount > 0 ? "ok" : "error",
+            );
+          } else {
+            setStatus(
+              recoveredCount > 0
+                ? `Retry recovered all remaining ${recoveredCount} images.`
+                : "No failed URLs left to retry.",
+              "ok",
+            );
+          }
+        } catch (_error) {
+          setStatus("Retry failed due to an unexpected error.", "error");
+        } finally {
+          retryFailuresButton.textContent = originalLabel;
+          retryFailuresButton.disabled = lastZipFailedItems.length === 0;
+        }
       }
 
       function parseAcbuyContext(acbuyUrlString) {
@@ -779,8 +905,9 @@
       function renderGallery(imageUrls) {
         gallery.innerHTML = "";
         currentGalleryUrls = [...imageUrls];
-        lastZipFailedUrls = [];
-        failedReportButton.disabled = true;
+        lastZipFailedItems = [];
+        failuresVisible = false;
+        refreshFailuresPanel();
         downloadAllButton.disabled = currentGalleryUrls.length === 0;
         countText.textContent = `${imageUrls.length} image${imageUrls.length === 1 ? "" : "s"}`;
         emptyText.classList.toggle("hidden", imageUrls.length > 0);
@@ -973,6 +1100,12 @@
 
       downloadAllButton.addEventListener("click", downloadAllAsZip);
       failedReportButton.addEventListener("click", downloadFailedUrlsReport);
+      retryFailuresButton.addEventListener("click", retryFailedUrls);
+      toggleFailuresButton.addEventListener("click", () => {
+        if (!lastZipFailedItems.length) return;
+        failuresVisible = !failuresVisible;
+        refreshFailuresPanel();
+      });
 
       lightboxClose.addEventListener("click", hideLightbox);
       lightboxPrev.addEventListener("click", () => stepLightbox(-1));
