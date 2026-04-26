@@ -3,7 +3,7 @@ const cors = require("cors");
 const path = require("path");
 
 const app = express();
-const PORT = process.env.PORT || 5500;
+const PORT = process.env.PORT || 8787;
 
 const ALLOWED_HOSTS = ["acbuy.com", "cnfans.com"];
 

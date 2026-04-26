@@ -239,25 +239,56 @@
         return [...found];
       }
 
+      function safeJsonParse(text) {
+        try {
+          return JSON.parse(text);
+        } catch (_error) {
+          return null;
+        }
+      }
+
+      function normalizePossibleImage(url) {
+        if (typeof url !== "string") return "";
+        const trimmed = url.trim();
+        if (!trimmed) return "";
+        if (!/^https?:\/\//i.test(trimmed)) return "";
+        return trimmed;
+      }
+
+      function parseAcbuyContext(acbuyUrlString) {
+        try {
+          const parsed = new URL(acbuyUrlString);
+          const id = parsed.searchParams.get("id") || "";
+          const source = parsed.searchParams.get("source") || "AL";
+          const encodedUrl = parsed.searchParams.get("url") || "";
+
+          let decodedUrl = "";
+          if (encodedUrl) {
+            const once = decodeURIComponent(encodedUrl);
+            decodedUrl = once.includes("%") ? decodeURIComponent(once) : once;
+          }
+
+          return {
+            id,
+            source,
+            encodedUrl,
+            decodedUrl,
+          };
+        } catch (_error) {
+          return {
+            id: "",
+            source: "AL",
+            encodedUrl: "",
+            decodedUrl: "",
+          };
+        }
+      }
+
       async function fetchPageText(targetUrl) {
         const stripped = targetUrl.replace(/^https?:\/\//i, "");
         const encodedTarget = encodeURIComponent(targetUrl);
 
-        const shouldUseSameOriginApi =
-          ["localhost", "127.0.0.1"].includes(window.location.hostname) &&
-          ["5500", "8787"].includes(window.location.port);
-
-        const localBase =
-          window.location.origin && window.location.origin !== "null"
-            ? window.location.origin
-            : "";
-
         const localEndpoints = [
-          shouldUseSameOriginApi && localBase
-            ? `${localBase}/api/fetch?url=${encodedTarget}`
-            : "",
-          `http://127.0.0.1:5500/api/fetch?url=${encodedTarget}`,
-          `http://localhost:5500/api/fetch?url=${encodedTarget}`,
           `http://127.0.0.1:8787/api/fetch?url=${encodedTarget}`,
           `http://localhost:8787/api/fetch?url=${encodedTarget}`,
         ].filter(Boolean);
@@ -288,6 +319,81 @@
         }
 
         throw new Error(errors.join(" | "));
+      }
+
+      async function fetchTextFromLocalProxy(targetUrl) {
+        const encodedTarget = encodeURIComponent(targetUrl);
+        const endpoints = [
+          `http://127.0.0.1:8787/api/fetch?url=${encodedTarget}`,
+          `http://localhost:8787/api/fetch?url=${encodedTarget}`,
+        ];
+
+        for (const endpoint of endpoints) {
+          try {
+            const response = await fetch(endpoint);
+            if (!response.ok) continue;
+            const text = await response.text();
+            if (text) return text;
+          } catch (_error) {
+            // Try next endpoint.
+          }
+        }
+
+        return "";
+      }
+
+      async function getAcbuyFallbackImages(productUrl) {
+        const context = parseAcbuyContext(productUrl);
+        const found = new Set();
+
+        if (context.id) {
+          const qcApiUrl = `https://www.acbuy.com/prefix-api/store-order/api/getOrderProductQcImages?id=${encodeURIComponent(context.id)}`;
+          const qcText = await fetchTextFromLocalProxy(qcApiUrl);
+          const qcJson = safeJsonParse(qcText);
+          const qcList = qcJson?.data?.imageList;
+
+          if (Array.isArray(qcList)) {
+            qcList.forEach((item) => {
+              const candidate =
+                typeof item === "string"
+                  ? item
+                  : item?.url || item?.image || item?.img || item?.src || "";
+              const normalized = normalizePossibleImage(candidate);
+              if (normalized) found.add(normalized);
+            });
+          }
+        }
+
+        const searchParams = new URLSearchParams();
+        if (context.id) searchParams.set("id", context.id);
+        if (context.source) searchParams.set("source", context.source);
+        if (context.decodedUrl) searchParams.set("url", context.decodedUrl);
+
+        if ([...searchParams.keys()].length > 0) {
+          const searchApiUrl = `https://www.acbuy.com/prefix-api/store-product/product/api/item/search?${searchParams.toString()}`;
+          const searchText = await fetchTextFromLocalProxy(searchApiUrl);
+          const searchJson = safeJsonParse(searchText);
+          const items = searchJson?.data?.items;
+
+          if (Array.isArray(items)) {
+            items.forEach((item) => {
+              const candidates = [
+                item?.pic_path,
+                item?.picUrl,
+                item?.image,
+                item?.img,
+                item?.photo,
+              ];
+
+              candidates.forEach((candidate) => {
+                const normalized = normalizePossibleImage(candidate);
+                if (normalized) found.add(normalized);
+              });
+            });
+          }
+        }
+
+        return [...found];
       }
 
       function renderGallery(imageUrls) {
@@ -343,7 +449,22 @@
 
         try {
           const pageText = await fetchPageText(urlString);
-          const extracted = extractImageUrlsFromText(pageText, urlString);
+          let extracted = extractImageUrlsFromText(pageText, urlString);
+
+          if (extracted.length === 0) {
+            const host = new URL(urlString).hostname.toLowerCase();
+            const isAcbuy = host === "acbuy.com" || host.endsWith(".acbuy.com");
+            if (isAcbuy) {
+              const apiFallbackImages = await getAcbuyFallbackImages(urlString);
+              if (apiFallbackImages.length > 0) {
+                extracted = apiFallbackImages;
+                setStatus(
+                  "Loaded images using ACBuy API fallback.",
+                  "ok",
+                );
+              }
+            }
+          }
 
           if (extracted.length === 0) {
             renderGallery([]);
@@ -366,7 +487,7 @@
         } catch (error) {
           renderGallery([]);
           setStatus(
-            "Could not fetch page content automatically. Start local server with 'npm run dev' and open from http://127.0.0.1:5500.",
+            "Could not fetch page content automatically. Start local proxy with 'npm run dev' (port 8787), then try Reload.",
             "error",
           );
           console.error(error);
